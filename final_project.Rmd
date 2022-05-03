@@ -11,10 +11,48 @@ Read in Data
 GMSL <- read.csv('https://datahub.io/core/sea-level-rise/r/csiro_recons_gmsl_mo_2015.csv')
 head(GMSL)
 
+GMSL$Time=as.Date(GMSL$Time)
+GMSL$Time = format(GMSL$Time, '%m/%Y')
+
+
+
+# temp data is GISS
 TEMP<- read.csv('monthly.csv')
-head(TEMP)
+
+# the date column is in 2 seperate formats so need to change
+
+Y1 <- strptime(as.character(TEMP$Date[1:1404]), "%m/%d/%Y")
+Y1<-format(Y1, "%m/%Y")
 
 
+TEMP$Date[1:1404] = Y1
+
+
+Y2 <- strptime(as.character(TEMP$Date[1405:nrow(TEMP)]), "%Y-%m-%d")
+Y2<-format(Y2, "%m/%Y")
+
+TEMP$Date[1405:nrow(TEMP)] = Y2
+
+
+TEMP = TEMP[nrow(TEMP):1,]
+
+TEMP = TEMP[1:1608,]
+
+
+
+
+
+
+
+# turn dataframes into time series
+y_temp =ts(TEMP$Mean, frequency = 12, start = c(1880,1))
+y_gmsl =ts(GMSL$GMSL, frequency = 12, start = c(1880,1))
+
+# combine ts into 1 dataframe
+
+Y = data.frame(temp=y_temp, gmsl=y_gmsl)
+
+ts.plot(Y)
 
 ```
 
