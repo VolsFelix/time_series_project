@@ -1,0 +1,21 @@
+---
+title: "R Notebook"
+output: html_notebook
+editor_options: 
+  chunk_output_type: inline
+---
+
+Read in Data
+
+```{r}
+GMSL <- read.csv('https://datahub.io/core/sea-level-rise/r/csiro_recons_gmsl_mo_2015.csv')
+head(GMSL)
+
+TEMP<- read.csv('monthly.csv')
+head(TEMP)
+
+
+
+```
+
+
