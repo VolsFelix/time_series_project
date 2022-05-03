@@ -9,6 +9,8 @@ Read in Data
 
 ```{r}
 GMSL <- read.csv('https://datahub.io/core/sea-level-rise/r/csiro_recons_gmsl_mo_2015.csv')
+# take away the uncertainty column
+GMSL <-GMSL[,1:2]
 head(GMSL)
 
 GMSL$Time=as.Date(GMSL$Time)
@@ -43,7 +45,6 @@ TEMP = TEMP[1:1608,]
 
 
 
-
 # turn dataframes into time series
 y_temp =ts(TEMP$Mean, frequency = 12, start = c(1880,1))
 y_gmsl =ts(GMSL$GMSL, frequency = 12, start = c(1880,1))
@@ -52,13 +53,105 @@ y_gmsl =ts(GMSL$GMSL, frequency = 12, start = c(1880,1))
 
 Y = data.frame(temp=y_temp, gmsl=y_gmsl)
 
-ts.plot(Y)
+head(Y)
+
+ts.plot(Y$temp)
+ts.plot(Y$gmsl)
 
 #GMSL: sea level in mm in reference to 1990
 
 #temp: Average global mean temperature anomalies in degrees Celsius relative to a base period. GISTEMP base period: 1951-1980. GCAG base period: 20th century average.
 
 
+# we can see that both values increase over time
+# temp appears to be more cyclical
+
+
+# Period is year and frequency is 12?
+
+
+```
+```{r}
+# focal Data will be the global mean sea level
+
+head(GMSL)
+y=y_gmsl
+
+# mean of time series
+mean(y)
+
+# standard deviation of time series
+n=length(y)
+sqrt(var(y)*(n-1)/n)
+
+```
+```{r}
+# autocorrelation plot
+
+acf(y, lag.max=40)
+
+# it appears that every point is highly correlated but it does decrease over time.
+# there appears to be a very slight amount of seasonality
+```
+```{r}
+# seasonality analysis
+
+mape = function(pred, true){
+  return(mean(abs((pred - true) / true), na.rm=T))
+}
+
+mae = function(pred, true){
+  return(sum(abs(pred - true),na.rm=T) / length(y))
+}
+
+# additive model
+y_decomp=decompose(y, type='additive')
+
+# multiplicative model
+
+Y_decomp_mult=decompose(y,type='multiplicative')
+
+
+y_pred_add=y_decomp$trend + y_decomp$seasonal
+y_pred_mult=Y_decomp_mult$trend*Y_decomp_mult$seasonal
+
+
+
+
+#MAPE
+mape(y_pred_add,y)
+mape(y_pred_mult,y)
+# both return INF
+
+
+
+#MAE
+mae(y_pred_add,y)
+mae(y_pred_mult,y)
+# the additive model has a lower MAE so it is more accurate
+
+
+
+
+
+
+seas=y_decomp$seasonal
+seas1=window(seas,end=c(1880,12))
+plot.ts(seas1)
+#The sea level appears to raise in the summer time from winter. It peaks around april and falls until June and  spikes again around late July then falls.
+
+
+trendy=y_decomp$trend
+plot.ts(trendy)
+
+#there is a significant positive trend
+
+
 ```
 
+```{r}
+# seasonality 
+
+
+```
 
