@@ -8,6 +8,9 @@ editor_options:
 Read in Data
 
 ```{r}
+library(forecast)
+library(tseries)
+
 GMSL <- read.csv('https://datahub.io/core/sea-level-rise/r/csiro_recons_gmsl_mo_2015.csv')
 # take away the uncertainty column
 GMSL <-GMSL[,1:2]
@@ -69,8 +72,13 @@ ts.plot(Y$gmsl)
 
 # Period is year and frequency is 12?
 
+#Start in january 1880
+#End in December 2013
+
 
 ```
+
+
 ```{r}
 # focal Data will be the global mean sea level
 
@@ -85,6 +93,8 @@ n=length(y)
 sqrt(var(y)*(n-1)/n)
 
 ```
+
+
 ```{r}
 # autocorrelation plot
 
@@ -93,6 +103,8 @@ acf(y, lag.max=40)
 # it appears that every point is highly correlated but it does decrease over time.
 # there appears to be a very slight amount of seasonality
 ```
+
+
 ```{r}
 # seasonality analysis
 
@@ -151,7 +163,72 @@ plot.ts(trendy)
 
 ```{r}
 # seasonality 
+adf.test(y)
+kpss.test(y)
 
+#if adf p value not significant then it is not stationary
+#if kpss p-value is significant it is not stationary
+
+#passes adf but fails kpss try differencing
+
+#see how many times we need to difference 
+ndiffs(y,test='adf')
+ndiffs(y,test='kpss')
+
+#do one time difference
+y_diff=diff(y)
+
+adf.test(y_diff)
+kpss.test(y_diff)
+
+#both tests show stationarity now using first order differencing
 
 ```
+
+**Modeling and Forecasting**
+```{r}
+#Holt Winters Model
+
+#split into train and test set at roughly 83%-17%
+y_train=window(y,end=c(1990,12))
+y_test=window(y,start=c(1991,1))
+
+
+y_model=HoltWinters(y_train, seasonal='additive')
+
+plot.ts(y_train)
+lines(y_model$fitted[,'xhat'],col='blue')
+
+```
+
+```{r}
+#holt winters model effects
+print(y_model$alpha)
+print(y_model$beta)
+print(y_model$gamma)
+
+y_model$coefficients
+
+plot.ts(y_train)
+plot.ts(y_model$fitted[,'trend'])
+
+plot.ts(y_train)
+plot.ts(y_model$fitted[,'season'])
+```
+
+
+```{r}
+#holt winters predictions
+n_test=length(y_test)
+y_pred=forecast(y_model,h=n_test)$mean
+
+plot.ts(y_test)
+lines(y_pred,col='blue')
+```
+
+
+```{r}
+
+```
+
 
