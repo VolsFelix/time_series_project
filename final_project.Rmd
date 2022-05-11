@@ -84,7 +84,7 @@ ts.plot(Y$gmsl)
 
 head(GMSL)
 y=y_gmsl
-temp=window(y_temp,end=c(1990,12))
+temp=y_temp
 
 # mean of time series
 mean(y)
@@ -176,8 +176,11 @@ kpss.test(y)
 ndiffs(y,test='adf')
 ndiffs(y,test='kpss')
 
-#do one time difference
+#do one time difference sea level
 y_diff=diff(y)
+
+#do one time difference
+temp_diff=diff(temp)
 
 adf.test(y_diff)
 kpss.test(y_diff)
@@ -186,16 +189,46 @@ kpss.test(y_diff)
 
 ```
 
+
+```{r}
+#test stationarity of temp variable
+adf.test(temp)
+kpss.test(temp)
+
+#if adf p value not significant then it is not stationary
+#if kpss p-value is significant it is not stationary
+
+#passes adf but fails kpss try differencing
+
+#see how many times we need to difference 
+ndiffs(y,test='adf')
+ndiffs(y,test='kpss')
+
+adf.test(temp_diff)
+kpss.test(temp_diff)
+
+```
+
+
+```{r}
+#create train and test for differenced data
+
+Y_diff = data.frame(temp=temp_diff, gmsl=y_diff)
+
+Y_diff_ts=ts(Y_diff,start=c(1880,1),frequency=12)
+
+Y_train=window(Y_diff_ts,end=c(1990,12))
+Y_test=window(Y_diff_ts,start=c(1991,1))
+```
+
+
 **Modeling and Forecasting**
 ```{r}
 #Holt Winters Model
 
-#split into train and test set at roughly 83%-17%
+#split into train and test set at roughly 83%-17% of undifferenced y values
 y_train=window(y,end=c(1990,12))
-y_diff_train=window(y,end=c(1990,12))
 y_test=window(y,start=c(1991,1))
-y_diff_test=window(y,start=c(1991,1))
-
 
 
 y_model=HoltWinters(y_train, seasonal='additive')
@@ -204,6 +237,7 @@ plot.ts(y_train)
 lines(y_model$fitted[,'xhat'],col='blue')
 
 ```
+
 
 ```{r}
 #holt winters model effects
@@ -235,13 +269,14 @@ mae(y_pred,y_test)
 
 ```{r}
 #build arima model
-arima_model=auto.arima(y_train,d=1,max.p=24,max.q=24,max.P=2,max.Q=2,max.D=1,
-                    allowdrift=F)
+arima_model=auto.arima(y_train,d=1,max.p=120,max.q=0,max.P=0,max.Q=0,max.D=0,
+                    allowdrift=T)
+
 
 #seasonality of 2 years in the past and looking at 24 months in the past of previous data
 
 summary(arima_model)
-# mae = 1.797629  
+# mae = 1.798502   
 
 y_forecast=forecast(arima_model,h=n_test)$mean
 
@@ -250,6 +285,37 @@ lines(y_forecast,col='blue')
 ```
 
 
+```{r}
+#varma model
+Eccm(Y_train,maxp=12,maxq=12) #matrix of p values: looking for p-value>0.05
+
+#p=7
+#q=6
+
+var1=VARMA(Y_train,p=7,q=0,include.mean=F)
+var2=VARMA(Y_train,p=0,q=6,include.mean=F)
+
+var1$aic
+var2$aic
+```
+
+
+```{r}
+#varma predictions
+constrained_var=refVARMA(var1,thres=2)
+
+Y_pred=VARMApred(constrained_var,h=nrow(Y_test))$pred
+
+Y_real= rbind(Y[1,],Y_train,Y_test)
+Y_pred=rbind(Y[1,],Y_train,Y_pred)
+
+Y_real=apply(Y_real,MARGIN=2,FUN=cumsum)
+Y_pred=apply(Y_pred,MARGIN=2,FUN=cumsum)
+
+plot.ts(Y_real)
+plot.ts(Y_pred,col='blue')
+
+```
 
 
 
