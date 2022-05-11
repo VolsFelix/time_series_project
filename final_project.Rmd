@@ -84,6 +84,7 @@ ts.plot(Y$gmsl)
 
 head(GMSL)
 y=y_gmsl
+temp=window(y_temp,end=c(1990,12))
 
 # mean of time series
 mean(y)
@@ -191,7 +192,10 @@ kpss.test(y_diff)
 
 #split into train and test set at roughly 83%-17%
 y_train=window(y,end=c(1990,12))
+y_diff_train=window(y,end=c(1990,12))
 y_test=window(y,start=c(1991,1))
+y_diff_test=window(y,start=c(1991,1))
+
 
 
 y_model=HoltWinters(y_train, seasonal='additive')
@@ -224,11 +228,28 @@ y_pred=forecast(y_model,h=n_test)$mean
 
 plot.ts(y_test)
 lines(y_pred,col='blue')
+
+mae(y_pred,y_test)
 ```
 
 
 ```{r}
+#build arima model
+arima_model=auto.arima(y_train,d=1,max.p=24,max.q=24,max.P=2,max.Q=2,max.D=1,
+                    allowdrift=F)
 
+#seasonality of 2 years in the past and looking at 24 months in the past of previous data
+
+summary(arima_model)
+# mae = 1.797629  
+
+y_forecast=forecast(arima_model,h=n_test)$mean
+
+plot(y_test)
+lines(y_forecast,col='blue')
 ```
+
+
+
 
 
