@@ -1,0 +1,333 @@
+---
+title: "R Notebook"
+output: html_notebook
+editor_options: 
+  chunk_output_type: inline
+---
+
+Read in Data
+
+```{r}
+library(forecast)
+library(tseries)
+library(MTS)
+library(lmtest)
+
+GMSL <- read.csv('https://datahub.io/core/sea-level-rise/r/csiro_recons_gmsl_mo_2015.csv')
+# take away the uncertainty column
+GMSL <-GMSL[,1:2]
+head(GMSL)
+
+GMSL$Time=as.Date(GMSL$Time)
+GMSL$Time = format(GMSL$Time, '%m/%Y')
+
+
+
+# temp data is GISS
+TEMP<- read.csv('monthly.csv')
+
+# the date column is in 2 seperate formats so need to change
+
+Y1 <- strptime(as.character(TEMP$Date[1:1404]), "%m/%d/%Y")
+Y1<-format(Y1, "%m/%Y")
+
+
+TEMP$Date[1:1404] = Y1
+
+
+Y2 <- strptime(as.character(TEMP$Date[1405:nrow(TEMP)]), "%Y-%m-%d")
+Y2<-format(Y2, "%m/%Y")
+
+TEMP$Date[1405:nrow(TEMP)] = Y2
+
+
+TEMP = TEMP[nrow(TEMP):1,]
+
+TEMP = TEMP[1:1608,]
+
+
+
+
+
+
+# turn dataframes into time series
+y_temp =ts(TEMP$Mean, frequency = 12, start = c(1880,1))
+y_gmsl =ts(GMSL$GMSL, frequency = 12, start = c(1880,1))
+
+# combine ts into 1 dataframe
+
+Y = data.frame(temp=y_temp, gmsl=y_gmsl)
+
+head(Y)
+
+ts.plot(Y$temp)
+ts.plot(Y$gmsl)
+
+#GMSL: sea level in mm in reference to 1990
+
+#temp: Average global mean temperature anomalies in degrees Celsius relative to a base period. GISTEMP base period: 1951-1980. GCAG base period: 20th century average.
+
+
+# we can see that both values increase over time
+# temp appears to be more cyclical
+
+
+# Period is year and frequency is 12?
+
+#Start in january 1880
+#End in December 2013
+
+
+```
+
+
+```{r}
+# focal Data will be the global mean sea level
+
+head(GMSL)
+y=y_gmsl
+temp=window(y_temp,end=c(1990,12))
+
+# mean of time series
+mean(y)
+
+# standard deviation of time series
+n=length(y)
+sqrt(var(y)*(n-1)/n)
+
+```
+
+
+```{r}
+# autocorrelation plot
+
+acf(y, lag.max=40)
+
+# it appears that every point is highly correlated but it does decrease over time.
+# there appears to be a very slight amount of seasonality
+```
+
+
+```{r}
+# seasonality analysis
+
+mape = function(pred, true){
+  return(mean(abs((pred - true) / true), na.rm=T))
+}
+
+mae = function(pred, true){
+  return(sum(abs(pred - true),na.rm=T) / length(y))
+}
+
+# additive model
+y_decomp=decompose(y, type='additive')
+
+# multiplicative model
+
+Y_decomp_mult=decompose(y,type='multiplicative')
+
+
+y_pred_add=y_decomp$trend + y_decomp$seasonal
+y_pred_mult=Y_decomp_mult$trend*Y_decomp_mult$seasonal
+
+
+
+
+#MAPE
+mape(y_pred_add,y)
+mape(y_pred_mult,y)
+# both return INF
+
+
+
+#MAE
+mae(y_pred_add,y)
+mae(y_pred_mult,y)
+# the additive model has a lower MAE so it is more accurate
+
+
+
+
+
+
+seas=y_decomp$seasonal
+seas1=window(seas,end=c(1880,12))
+plot.ts(seas1)
+#The sea level appears to raise in the summer time from winter. It peaks around april and falls until June and  spikes again around late July then falls.
+
+
+trendy=y_decomp$trend
+plot.ts(trendy)
+
+#there is a significant positive trend
+
+
+```
+
+```{r}
+# stationarity 
+adf.test(y)
+kpss.test(y)
+
+#if adf p value not significant then it is not stationary
+#if kpss p-value is significant it is not stationary
+
+#passes adf but fails kpss try differencing
+
+#see how many times we need to difference 
+ndiffs(y,test='adf')
+ndiffs(y,test='kpss')
+
+#do one time difference
+y_diff=diff(y)
+
+adf.test(y_diff)
+kpss.test(y_diff)
+
+#both tests show stationarity now using first order differencing
+
+```
+
+**Modeling and Forecasting**
+```{r}
+#Holt Winters Model
+
+#split into train and test set at roughly 83%-17%
+y_train=window(y,end=c(1990,12))
+y_diff_train=window(y,end=c(1990,12))
+y_test=window(y,start=c(1991,1))
+y_diff_test=window(y,start=c(1991,1))
+
+
+
+y_model_holt=HoltWinters(y_train, seasonal='additive')
+
+holt_train_fit=y_model_holt$fitted[,'xhat']
+
+plot.ts(y_train, col='red')
+
+
+lines(y_model$fitted[,'xhat'],col='blue')
+
+
+
+```
+
+```{r}
+#holt winters model effects
+print(y_model$alpha)
+print(y_model$beta)
+print(y_model$gamma)
+
+y_model$coefficients
+
+plot.ts(y_train)
+plot.ts(y_model$fitted[,'trend'])
+
+plot.ts(y_train)
+plot.ts(y_model$fitted[,'season'])
+```
+
+
+```{r}
+#holt winters predictions
+n_test=length(y_test)
+y_pred=forecast(y_model,h=n_test)$mean
+
+plot.ts(y_test)
+lines(y_pred,col='blue')
+
+mae(y_pred,y_test)
+
+mae(holt_train_fit,y_train)
+```
+
+
+```{r}
+#build arima model
+
+arima_model=auto.arima(y_train,
+                    allowdrift=T)
+#seasonality of 2 years in the past and looking at 24 months in the past of previous data
+
+summary(arima_model)
+# mae = 1.797629  
+
+plot(y_train)
+lines(arima_model$fitted,col='blue')
+
+#y_forecast=forecast(arima_model,h=n_test)$mean
+
+#plot(y_test)
+#lines(y_forecast,col='blue')
+```
+
+
+
+```{r}
+head(Y)
+
+for(i in 1:2){
+  print( ndiffs(Y[,i],test='adf'))
+  print( ndiffs(Y[,i],test='kpss'))
+
+}
+
+# first order difference both sea level and temperature data
+
+
+Y_diff=data.frame(apply(Y,MARGIN=2,FUN=diff))
+
+Y_diff_ts=ts(Y_diff,start=c(1880,1),frequency=12)
+#split into train and test set at roughly 83%-17%
+Y_train=window(Y_diff_ts,end=c(1990,12))
+Y_test=window(Y_diff_ts,start=c(1991,1))
+
+Eccm(Y_train,maxp=10,maxq=10)
+   #q  q   q
+#P
+#P
+#P
+
+var1=VARMA(Y_train,p=0,q=6,include.mean=F) #VMA 0,6 
+# AIC  -2.6493
+var2=VARMA(Y_train,p=7,q=0,include.mean=F) #VARMA 6,1
+# AIC -2.2379
+
+# minimize max p,q
+var3 =VARMA(Y_train,p=2,q=2,include.mean=F)
+#2.058312
+  
+# AIC is lowest with var(0,6) 2 so lets use VMA
+
+
+Y_pred=var1$residuals
+head(Y_pred)
+
+length(Y_pred)
+length(Y_train)
+
+
+head(Y_train)
+
+
+
+#Y_real= rbind(Y[1,],Y_train,Y_test)
+Y#_pred=rbind(Y[1,],Y_train,Y_pred)
+
+Y_real=apply(Y_train,MARGIN=2,FUN=cumsum)
+Y_pred_train=apply(Y_pred,MARGIN=2,FUN=cumsum)
+
+
+short_y_train=window(Y_train, start=c(1880,7))[,1]
+length(short_y_train)
+
+#in sample MAE
+mae(Y_pred_train[,1],Y_real[,1])
+
+plot.ts(Y_real)
+
+plot.ts(Y_pred_train,col='blue')
+```
+
+
